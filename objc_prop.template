@@ -1,0 +1,16 @@
+{%-if p.comment -%}
+/**
+{{p.comment}}
+ */
+{% endif -%}
+
+{%- if p.is_native_type -%}
+@property (nonatomic) {{p.type}} {{p.name}};
+{%- elif p.is_simple_type -%}
+@property (nonatomic, copy) {{p.type}} *{{p.name}};
+{%- elif p.type == 'NSArray' -%}
+@property (nonatomic, strong) {{p.type}}<{{p.item_type}} *> *{{p.name}};
+{%- else -%}
+@property (nonatomic, strong) {{p.type}} *{{p.name}};
+{%- endif -%}
+

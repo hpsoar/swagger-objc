@@ -3,21 +3,74 @@
 import json
 from jinja2 import Template
 
-from jinja2 import Environment, Undefined
+from jinja2 import FileSystemLoader
+from jinja2.environment import Environment
+jenv = Environment()
+jenv.loader = FileSystemLoader('.')
 
 
-def def_name_filters():
+class Property(object):
+    def __init__(self, name, info):
+        self.type = ''
+        self.item_type = None
+        self.parse(name, info)
 
-    def variable_name(name):
-        return 'tttt_%s' % name
+    """
+        boolean/int32/int64/float/double/string/date/date-time/array
+    """
+    def parse(self, name, definition):
+        if not definition:
+            return None
 
-    env = Environment()
-    env.filters['var_name'] = variable_name
+        if not name:
+            name = definition.get('name', None)
+        self.name = name
+
+        definition.update(definition.get('schema', {}))
+    
+        t = definition.get('type', None)
+        if 'format' in definition:
+            t = definition['format']
+    
+        if '$ref' in definition:
+            t = definition['$ref']
+
+        self.type = t
+
+        self.required = definition.get('required', False)
+    
+        self.default = definition.get('default', None)
+        self.item_type = Property('item_type', definition.get('items', None))
+        self.enum = definition.get('enum', None)
+        self.example = definition.get('example', None)
+        self.examples = definition.get('examples', None)
+        self.comment = ''
+        self.desc = definition.get('description', None)
+        self.is_native_type = False
+        self.is_simple_type = False
+
+
+class Parameter(Property):
+    def __init__(self, name, info):
+        super(Parameter, self).__init__(name, info)
+        self.desc = info.get('description', '')
+        self.position = info.get('in', 'query')
+    
+
+class API:
+    def __init__(self, name, path, method, parameters, responses, summary, desc, tags):
+        self.name = name
+        self.path = path
+        self.method = method
+        self.parameters = parameters
+        self.responses = responses
+        self.summary = summary
+        self.desc = desc
+        self.tags = tags
 
 
 def render_models(models, template):
-    content = open(template).read()
-    template = Template(content)
+    template = jenv.get_template(template)
     print template.render(models=models)
 
 
@@ -31,15 +84,17 @@ def render_body(models):
 
 def to_camel_case(s, lower=True):
     import re
-    return re.sub(r'(?!^)_([a-zA-Z])', lambda m: m.group(1).upper(), s) if s else s
+    ret = re.sub(r'(?!^)_([a-zA-Z])', lambda m: m.group(1).upper(), s) if s else s
+    if not lower:
+        ret = ret[0].upper() + ret[1:] if ret else ret
+    return ret
 
-def process_property_names(models):
-    for m in models:
-        for p in m['properties']:
-            name = to_camel_case(p['name'])
-            if name == 'id':
-                name = 'Id'
-            p['name'] = name
+
+def convert_property_name(name):
+    if name == 'id':
+        return 'Id'
+    else:
+        return to_camel_case(name)
 
 
 def flatten_models(models):
@@ -47,89 +102,65 @@ def flatten_models(models):
 
 
 def process_ref_types(p, models):
-    t = p['type']
-    if t.startswith('#/definitions'):
-        t = t.replace('#/definitions/', '')
-        t = models[t]['name']
-        p['type'] = t
+    if p.type and p.type.startswith('#/definitions'):
+        t = p.type.replace('#/definitions/', '')
+        p.type = models[t]['name']
 
 
-def process_property_types(models):
+def process_property(p, models):
+    process_ref_types(p, models)
+    if p.item_type:
+        process_ref_types(p.item_type, models)
+    if p.enum:
+        p.comment = '%s' % '\n'.join(p.enum)
+    p.name = convert_property_name(p.name)
+
+
+def process_model_properties(models):
     for (name, m) in models.items():
         for p in m.get('properties', []):
-            process_ref_types(p, models)
-            items = p.get('items', None) 
-            if items:
-                process_ref_types(items, models)
-            enum = p.get('enum', None)
-            if enum:
-                p['comment'] = '%s' % '\n'.join(enum)
+            process_property(p, models)
     return models
+
 
 def convert_to_objc_type(p):
     if not p: return (None, False, False, None)
 
-    t = p['type']
-
-    item_type, _, _, _ = convert_to_objc_type(p.get('items', {}))
+    convert_to_objc_type(p.item_type)
     m = {
-            'int32': ('int', True, True, None),
-            'int64': ('long long', True, True, None),
-            'float': ('float', True, True, None),
-            'double': ('double', True, True, None),
-            'boolean': ('BOOL', True, True, None),
-            'string': ('NSString', False, True, None),
-            'date': ('NSString', False, True, None),
-            'date-time': ('NSString', False, True, None),
-            'array': ('NSArray', False, False, item_type),
-            'byte': ('NSData', False, False, None),
-            'binary': ('NSData', False, False, None),
+            'int32': ('int', True, True),
+            'int64': ('long long', True, True),
+            'float': ('float', True, True),
+            'double': ('double', True, True),
+            'boolean': ('BOOL', True, True),
+            'string': ('NSString', False, True),
+            'date': ('NSString', False, True),
+            'date-time': ('NSString', False, True),
+            'array': ('NSArray', False, False),
+            'byte': ('NSData', False, False),
+            'binary': ('NSData', False, False),
             }
-    return m.get(t, (t, False, False, None))
+    t, is_native_type, is_simple_type = m.get(p.type, (p.type, False, False))
+    p.type = t
+    p.is_native_type = is_native_type
+    p.is_simple_type = is_simple_type
+    p.item_type = p.item_type and p.item_type.type
 
 
 def convert_to_objc_types(models):
-    for (name, m) in models.items():
+    for m in models:
         for p in m.get('properties', []):
-            t, is_native_type, is_simple_type, item_type = convert_to_objc_type(p)
-            p['type'] = t
-            p['is_native_type'] = is_native_type
-            p['is_simple_type'] = is_simple_type
-            p['item_type'] = item_type
+            convert_to_objc_type(p)
     return models
 
-
-"""
-    boolean/int32/int64/float/double/string/date/date-time/array
-"""
-def parse_property(name, definition):
-    if not definition:
-        return None
-
-    t = definition.get('type', None)
-    if 'format' in definition:
-        t = definition['format']
-
-    if '$ref' in definition:
-        t = definition['$ref']
-
-    items = parse_property('items', definition.get('items', None))
-    enum = definition.get('enum', None)
-
-    return {
-            'name': name,
-            'type': t,
-            'example': definition.get('example', None),
-            'items': items,
-            'enum': enum,
-            }
 
 def parse_model(model_name, definition):
     props = []
     required_props = definition.get('required', [])
     for (name, p) in definition.get('properties', {}).items():
-        prop = parse_property(name, p)
-        prop['required'] = name in required_props
+        prop = Property(name, p)
+        if not prop.required:
+            prop.required = name in required_props
         props.append(prop)
     return { 'name': model_name,
              'properties': props }
@@ -142,44 +173,84 @@ def parse_definitions(definitions):
     return models
 
 
-def main(path):
-    model = { 
-            'name': 'Person',
-            'properties': [
-                {
-                'name': 'test_gender',
-                'type': 'NSInteger',
-                'is_native_type': True,
-                'comment': 'hello',
-                },
-                {
-                'name': 'test_name',
-                'type': 'NSString',
-                'is_simple_type': True,
-                'comment': 'hello',
-                },
-                {
-                'name': 'test_books',
-                'type': 'NSArray<Book *>',
-                'comment': 'hello',
-                },
-                ],
-            }
-    models = [model]
-    process_property_names(models)
-    render_header(models)
+def process_api_names(apis):
+    for api in apis:
+        api.name = to_camel_case(api.name, lower=False)
+    return apis
 
+
+def process_api_parameters(apis, models):
+    for api in apis:
+        for p in api.parameters:
+            process_property(p, models)
+    return apis
+
+
+def process_api_responses(apis, models):
+    for api in apis:
+        for p in api.responses:
+            process_property(p, models)
+    return apis
+
+
+def convert_api_to_objc(apis):
+    for api in apis:
+        for p in api.parameters:
+            convert_to_objc_type(p)
+        for p in api.responses:
+            convert_to_objc_type(p)
+    return apis
+
+
+def parse_api(paths):
+    apis = []
+    for (path, ops) in paths.items():
+        for (method, api_info) in ops.items():
+            parameters = [Parameter(None, p) for p in api_info.get('parameters', [])]
+            responses = [Property(code, info) for (code, info) in api_info.get('responses', {}).items()]
+            api = API(api_info.get('operationId', ''), 
+                    path, 
+                    method,
+                    parameters,
+                    responses, 
+                    api_info.get('summary', ''),
+                    api_info.get('description', ''),
+                    api_info.get('tags', []))
+            apis.append(api)
+
+    return apis
+
+
+def render_apis(apis):
+    template = jenv.get_template('objc_api.template')
+    print template.render(apis=apis)
+
+
+def render_api_options(apis):
+    pass
+
+
+def main(path):
     content = json.load(open(path))
     for key in content:
         print key
 
     parsed_models = parse_definitions(content['definitions'])
-    parsed_models = process_property_types(parsed_models)
-    parsed_models = convert_to_objc_types(parsed_models)
+    parsed_models = process_model_properties(parsed_models)
+
+    apis = parse_api(content.get('paths', {}))
+    apis = process_api_names(apis)
+    apis = process_api_parameters(apis, parsed_models)
+    apis = process_api_responses(apis, parsed_models)
+    apis = convert_api_to_objc(apis)
+
     parsed_models = flatten_models(parsed_models)
-    process_property_names(parsed_models)
+    parsed_models = convert_to_objc_types(parsed_models)
     render_header(parsed_models)
     render_body(parsed_models)
+
+    render_api_options(apis)
+    render_apis(apis)
 
 if __name__ == '__main__':
     import sys

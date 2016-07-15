@@ -1,0 +1,8 @@
+{% for api in apis %}
+
+@interface {{ api.name }}Options : NSObject
+{% for p in api.parameters %}
+{% include 'objc_prop.template' %}
+{% endfor %}
+@end
+{% endfor %}
