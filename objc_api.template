@@ -6,3 +6,9 @@
 {% endfor %}
 @end
 {% endfor %}
+
+@interface CYAPIOptions ({{module}})
+{% for api in apis %}
++ (instance){{api.name}}Api;
+{% endfor %}
+@end

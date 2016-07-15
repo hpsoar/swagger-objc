@@ -221,9 +221,9 @@ def parse_api(paths):
     return apis
 
 
-def render_apis(apis):
+def render_apis(module, apis):
     template = jenv.get_template('objc_api.template')
-    print template.render(apis=apis)
+    print template.render(module=module, apis=apis)
 
 
 def render_api_options(apis):
@@ -250,7 +250,7 @@ def main(path):
     render_body(parsed_models)
 
     render_api_options(apis)
-    render_apis(apis)
+    render_apis('DoctorService', apis)
 
 if __name__ == '__main__':
     import sys
