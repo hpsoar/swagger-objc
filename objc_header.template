@@ -1,0 +1,25 @@
+
+{% for model in models %}
+@class {{ model.name }};
+{%- endfor %}
+
+{% for model in models %}
+@interface {{model.name}} : NSObject
+{% for p in model.properties -%}
+{%if p.comment %}
+/**
+{{p.comment}}
+ */
+{%- endif -%}
+
+{%- if p.is_native_type %}
+@property (nonatomic) {{p.type}} {{p.name}};
+{%- elif p.is_simple_type %}
+@property (nonatomic, copy) {{p.type}} *{{p.name}};
+{%- else %}
+@property (nonatomic, strong) {{p.type}} *{{p.name}};
+{% endif %}
+{% endfor %}
+@end
+
+{% endfor %}
