@@ -14,13 +14,20 @@ def def_name_filters():
     env = Environment()
     env.filters['var_name'] = variable_name
 
-def render_header(models):
-    content = open('objc_header.template').read()
+
+def render_models(models, template):
+    content = open(template).read()
     template = Template(content)
     print template.render(models=models)
 
+
+def render_header(models):
+    render_models(models, 'objc_header.template')
+
+
 def render_body(models):
-    pass
+    render_models(models, 'objc_body.template')
+
 
 def to_camel_case(s, lower=True):
     import re
@@ -29,7 +36,11 @@ def to_camel_case(s, lower=True):
 def process_property_names(models):
     for m in models:
         for p in m['properties']:
-            p['name'] = to_camel_case(p['name'])
+            name = to_camel_case(p['name'])
+            if name == 'id':
+                name = 'Id'
+            p['name'] = name
+
 
 def flatten_models(models):
     return[m for (name, m) in models.items()]
@@ -56,34 +67,35 @@ def process_property_types(models):
     return models
 
 def convert_to_objc_type(p):
-    if not p: return (None, False, False)
+    if not p: return (None, False, False, None)
 
     t = p['type']
 
-    item_type, _, _ = convert_to_objc_type(p.get('items', {}))
+    item_type, _, _, _ = convert_to_objc_type(p.get('items', {}))
     m = {
-            'int32': ('int', True, True),
-            'int64': ('long long', True, True),
-            'float': ('float', True, True),
-            'double': ('double', True, True),
-            'boolean': ('BOOL', True, True),
-            'string': ('NSString', False, True),
-            'date': ('NSString', False, True),
-            'date-time': ('NSString', False, True),
-            'array': ('NSArray<%s *>' % item_type, False, False),
-            'byte': ('NSData', False, False),
-            'binary': ('NSData', False, False),
+            'int32': ('int', True, True, None),
+            'int64': ('long long', True, True, None),
+            'float': ('float', True, True, None),
+            'double': ('double', True, True, None),
+            'boolean': ('BOOL', True, True, None),
+            'string': ('NSString', False, True, None),
+            'date': ('NSString', False, True, None),
+            'date-time': ('NSString', False, True, None),
+            'array': ('NSArray', False, False, item_type),
+            'byte': ('NSData', False, False, None),
+            'binary': ('NSData', False, False, None),
             }
-    return m.get(t, (t, False, False))
+    return m.get(t, (t, False, False, None))
 
 
 def convert_to_objc_types(models):
     for (name, m) in models.items():
         for p in m.get('properties', []):
-            t, is_native_type, is_simple_type = convert_to_objc_type(p)
+            t, is_native_type, is_simple_type, item_type = convert_to_objc_type(p)
             p['type'] = t
             p['is_native_type'] = is_native_type
             p['is_simple_type'] = is_simple_type
+            p['item_type'] = item_type
     return models
 
 
@@ -167,6 +179,7 @@ def main(path):
     parsed_models = flatten_models(parsed_models)
     process_property_names(parsed_models)
     render_header(parsed_models)
+    render_body(parsed_models)
 
 if __name__ == '__main__':
     import sys
