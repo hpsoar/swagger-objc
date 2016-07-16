@@ -1,5 +1,7 @@
-{% for api in apis %}
 
+#pragma mark - API parameters
+
+{% for api in apis %}
 @interface {{ api.name }}Options : NSObject
 {% for p in api.parameters %}
 {% include 'objc_prop.template' %}
@@ -7,8 +9,31 @@
 @end
 {% endfor %}
 
+#pragma mark - API responses
+
+{% for api in apis %}
+@interface {{ api.name }}Response : NSObject
+{% for p in api.merged_response %}
+{% include 'objc_prop.template' %}
+{% endfor %}
+@end
+{% endfor %}
+
+#pragma mark - API description
+// url, method, timeout eg.
+
 @interface CYAPIOptions ({{module}})
 {% for api in apis %}
 + (instance){{api.name}}Api;
 {% endfor %}
+@end
+
+#pragma mark - API module
+
+@interface {{module}} : NSObject
+
+{% for api in apis %}
++ (void)fetch:({{ api.name }}Options *)options callback:({{api.name}}Response *respone, NSError *error)callback;
+{% endfor %}
+
 @end

@@ -11,9 +11,11 @@ jenv.loader = FileSystemLoader('.')
 
 class Property(object):
     def __init__(self, name, info):
+        self.name = name
         self.type = ''
         self.item_type = None
-        self.parse(name, info)
+        if info:
+            self.parse(name, info)
 
     """
         boolean/int32/int64/float/double/string/date/date-time/array
@@ -45,7 +47,7 @@ class Property(object):
         self.example = definition.get('example', None)
         self.examples = definition.get('examples', None)
         self.comment = ''
-        self.desc = definition.get('description', None)
+        self.desc = definition.get('description', '')
         self.is_native_type = False
         self.is_simple_type = False
 
@@ -53,9 +55,8 @@ class Property(object):
 class Parameter(Property):
     def __init__(self, name, info):
         super(Parameter, self).__init__(name, info)
-        self.desc = info.get('description', '')
         self.position = info.get('in', 'query')
-    
+
 
 class API:
     def __init__(self, name, path, method, parameters, responses, summary, desc, tags):
@@ -67,6 +68,7 @@ class API:
         self.summary = summary
         self.desc = desc
         self.tags = tags
+        self.merged_response = None
 
 
 def render_models(models, template):
@@ -111,8 +113,11 @@ def process_property(p, models):
     process_ref_types(p, models)
     if p.item_type:
         process_ref_types(p.item_type, models)
+
     if p.enum:
         p.comment = '%s' % '\n'.join(p.enum)
+    elif p.examples:
+        p.comment = p.examples
     p.name = convert_property_name(p.name)
 
 
@@ -190,6 +195,31 @@ def process_api_responses(apis, models):
     for api in apis:
         for p in api.responses:
             process_property(p, models)
+        for p in api.merged_response:
+            process_property(p, models)
+
+    return apis
+
+
+def merge_response(apis):
+    import copy
+    for api in apis:
+        codes = []
+        descriptions = []
+        data = None
+        for p in api.responses:
+            codes.append(p.name)
+            descriptions.append(p.desc)
+            if p.name == '200':
+                data = copy.deepcopy(p)
+                data.name = 'data'
+        resp = [
+                Property('code', {'type': 'integer', 'format': 'int32', 'enum': codes }),
+                Property('description', {'type': 'string', 'examples': descriptions }),
+            ]
+        if data:
+            resp.append(data)
+        api.merged_response = resp
     return apis
 
 
@@ -198,6 +228,8 @@ def convert_api_to_objc(apis):
         for p in api.parameters:
             convert_to_objc_type(p)
         for p in api.responses:
+            convert_to_objc_type(p)
+        for p in api.merged_response:
             convert_to_objc_type(p)
     return apis
 
@@ -241,6 +273,7 @@ def main(path):
     apis = parse_api(content.get('paths', {}))
     apis = process_api_names(apis)
     apis = process_api_parameters(apis, parsed_models)
+    apis = merge_response(apis)
     apis = process_api_responses(apis, parsed_models)
     apis = convert_api_to_objc(apis)
 
