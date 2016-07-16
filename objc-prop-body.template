@@ -1,0 +1,28 @@
+@implementation {{cls_name}}
+
++ (NSDictionary *)mj_objectClassInArray {
+    return @{ 
+        {% for p in properties -%}
+        {% if p.type == 'NSArray' -%}
+            @"{{p.name}}": @"{{p.item_type}}",
+        {% endif -%}
+        {% endfor -%}
+    };
+}
+
++ (NSDictionary *)mj_replacedKeyFromPropertyName {
+    return @{ 
+        {% for p in properties -%}
+        {% if p.name == 'Id' -%}
+          @"Id": @"id",
+        {% endif -%}
+        {% endfor -%}
+    };
+}
+
++ (NSString *)mj_replacedKeyFromPropertyName121:(NSString *)propertyName {
+    NSString *replacedName = [[self mj_replacedKeyFromPropertyName121] objectForKey:propertyName];
+    return replacedName ?: [propertyName mj_underlineFromCamel];
+}
+
+@end

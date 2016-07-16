@@ -1,0 +1,8 @@
+
+{% for model in models %}
+
+{%- set cls_name = model.name -%} 
+{%- set properties = model.properties -%} 
+{% include 'objc-prop-body.template' %}
+
+{% endfor %}

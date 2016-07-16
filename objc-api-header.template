@@ -4,7 +4,7 @@
 {% for api in apis %}
 @interface {{ api.name }}Options : NSObject
 {% for p in api.parameters %}
-{% include 'objc_prop.template' %}
+{% include 'objc-prop-header.template' %}
 {% endfor %}
 @end
 {% endfor %}
@@ -14,7 +14,7 @@
 {% for api in apis %}
 @interface {{ api.name }}Response : NSObject
 {% for p in api.merged_response %}
-{% include 'objc_prop.template' %}
+{% include 'objc-prop-header.template' %}
 {% endfor %}
 @end
 {% endfor %}
@@ -30,10 +30,11 @@
 
 #pragma mark - API module
 
-@interface {{module}} : NSObject
+@interface {{module}} : CYAPIKit
 
 {% for api in apis %}
-+ (void)fetch:({{ api.name }}Options *)options callback:({{api.name}}Response *respone, NSError *error)callback;
+{%- set response_type = api.name+'Response' %}
++ (void)fetch:({{ api.name }}Options *)options callback:({{response_type}} *respone, NSError *error)callback;
 {% endfor %}
 
 @end

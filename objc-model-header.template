@@ -6,7 +6,7 @@
 {% for model in models %}
 @interface {{model.name}} : NSObject
 {% for p in model.properties %}
-{% include 'objc_prop.template' %}
+{% include 'objc-prop-header.template' %}
 {% endfor %}
 @end
 

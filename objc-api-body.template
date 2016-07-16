@@ -1,0 +1,56 @@
+
+#pragma mark - api parameters
+
+{% for api in apis %}
+
+{%- set cls_name = api.name+'Options' -%} 
+{%- set properties = api.parameters -%} 
+{% include 'objc-prop-body.template' %}
+
+{% endfor %}
+
+#pragma mark - api responses
+
+{% for api in apis %}
+{%- set cls_name = api.name+'Response' -%} 
+{%- set properties = api.merged_response -%} 
+{% include 'objc-prop-body.template' %}
+{% endfor %}
+
+#pragma mark - api options
+
+@implementation CYAPIOptions ({{module}})
+{% for api in apis %}
++ (instance){{api.name}}Api {
+    CYAPIOptions *options = [self new];
+    options.API = api.path;
+    options.method = api.method;
+    options.timeout = 10;
+    return options;
+}
+{% endfor %}
+@end
+
+#pragma mark - api module
+
+@implementation {{module}} 
+
+{% for api in apis %}
+{%- set response_type = api.name+'Response' -%}
++ (void)fetch:({{ api.name }}Options *)options 
+     callback:({{response_type}} *respone, NSError *error)callback {
+
+  [self.apiClient request:[CYAPIOptions {{api.name}}Api] 
+                  options:options 
+            responseClass:[{{response_type}} class] 
+                 callabck:^(id response, NSError *error) {
+      if (callback) {
+        callback(response, error);
+      }
+  }];
+}
+
+{% endfor -%}
+
+@end
+

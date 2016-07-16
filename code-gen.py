@@ -71,17 +71,16 @@ class API:
         self.merged_response = None
 
 
-def render_models(models, template):
-    template = jenv.get_template(template)
-    print template.render(models=models)
+def render_model_header(module, models):
+    template = jenv.get_template('objc-model-header.template')
+    o = open('%s_Model.h' % module, 'w')
+    print >>o, template.render(models=models)
 
 
-def render_header(models):
-    render_models(models, 'objc_header.template')
-
-
-def render_body(models):
-    render_models(models, 'objc_body.template')
+def render_model_body(module, models):
+    template = jenv.get_template('objc-model-body.template')
+    o = open('%s_Model.m' % module, 'w')
+    print >>o, template.render(models=models)
 
 
 def to_camel_case(s, lower=True):
@@ -253,16 +252,19 @@ def parse_api(paths):
     return apis
 
 
-def render_apis(module, apis):
-    template = jenv.get_template('objc_api.template')
-    print template.render(module=module, apis=apis)
+def render_api_header(module, apis):
+    template = jenv.get_template('objc-api-header.template')
+    o = open('%s_Api.h' % module, 'w')
+    print >>o, template.render(module=module, apis=apis)
 
 
-def render_api_options(apis):
-    pass
+def render_api_body(module, apis):
+    template = jenv.get_template('objc-api-body.template')
+    o = open('%s_Api.m' % module, 'w')
+    print >>o, template.render(module=module, apis=apis)
 
 
-def main(path):
+def main(path, module):
     content = json.load(open(path))
     for key in content:
         print key
@@ -279,12 +281,16 @@ def main(path):
 
     parsed_models = flatten_models(parsed_models)
     parsed_models = convert_to_objc_types(parsed_models)
-    render_header(parsed_models)
-    render_body(parsed_models)
+    render_model_header(module, parsed_models)
+    render_model_body(module, parsed_models)
 
-    render_api_options(apis)
-    render_apis('DoctorService', apis)
+    render_api_header(module, apis)
+    render_api_body(module, apis)
 
 if __name__ == '__main__':
     import sys
-    main(sys.argv[1])
+    module = 'Default'
+    if len(sys.argv) > 2:
+        module = sys.argv[2]
+    main(sys.argv[1], module)
+
